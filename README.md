@@ -45,7 +45,7 @@ Claude Code는 화면 오른쪽 아래에 **현재 컨텍스트 창 크기**를,
 ### 플러그인 설치
 ```bash
 # 1) 마켓플레이스 등록
-claude plugin marketplace add <GitHub사용자명>/token-per-prompt
+claude plugin marketplace add ssenu/token-per-prompt
 
 # 2) 전역 설치
 claude plugin install token-per-prompt@token-per-prompt -s user
