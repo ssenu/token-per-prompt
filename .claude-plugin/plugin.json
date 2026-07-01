@@ -1,0 +1,9 @@
+{
+  "name": "token-per-prompt",
+  "description": "질문(턴)별 토큰 사용량을 답변 아래와 상태줄에 표시하고, 세션 전체 리포트 표를 제공합니다. 100% 로컬, 토큰 소모 0.",
+  "version": "0.1.0",
+  "author": {
+    "name": "ssenu"
+  },
+  "keywords": ["tokens", "usage", "statusline", "hook", "cost", "dashboard"]
+}

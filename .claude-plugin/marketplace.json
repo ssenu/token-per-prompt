@@ -1,0 +1,17 @@
+{
+  "name": "token-per-prompt",
+  "owner": {
+    "name": "ssenu"
+  },
+  "metadata": {
+    "description": "질문별 토큰 사용량 표시 스킬",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "token-per-prompt",
+      "source": "./",
+      "description": "질문(턴)별 토큰 사용량을 답변 아래·상태줄에 표시하고 세션 리포트를 제공."
+    }
+  ]
+}
