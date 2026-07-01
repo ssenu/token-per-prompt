@@ -9,27 +9,23 @@ is auto-detected as the most recently written transcript under ~/.claude/project
 """
 import sys
 import os
-import json
 import glob
 import argparse
 import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from report import (iter_turns, billed_tokens, load_config,  # noqa: E402
-                    PLAN_5H_LIMIT, state_path)
+                    PLAN_5H_LIMIT)
 import calibrate  # noqa: E402
 
 
 def find_current_transcript():
-    """Prefer the transcript the Stop hook recorded for the active session;
-    fall back to the most recently modified transcript across all projects."""
-    try:
-        with open(state_path(), encoding="utf-8") as fh:
-            tp = json.load(fh).get("transcript")
-        if tp and os.path.exists(tp):
-            return tp
-    except Exception:
-        pass
+    """The most recently modified transcript = the session running this command.
+
+    Invoking /token-report appends the command turn to the *current* session's
+    transcript, so it is the freshest file on disk. (state.json is shared across
+    sessions and would point at whichever session last *finished* a turn, which
+    is wrong right after switching sessions — so we key on mtime instead.)"""
     base = os.path.expanduser(os.path.join("~", ".claude", "projects"))
     files = glob.glob(os.path.join(base, "*", "*.jsonl"))
     return max(files, key=os.path.getmtime) if files else None
