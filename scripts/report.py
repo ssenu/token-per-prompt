@@ -179,9 +179,14 @@ def iter_turns(transcript_path):
                 txt = txt.strip()
                 if txt and not txt.startswith("[Request interrupted") \
                         and "local-command" not in txt:
+                    # isMeta marks slash-command expansions and other injected
+                    # turns (Claude Code hides these from the chat too). Start a
+                    # turn so its assistant steps attribute correctly, but tag it
+                    # so the report can drop it instead of listing /token-report.
                     cur = {"q": txt.replace("\n", " "), "ts": o.get("timestamp", ""),
                            "input": 0, "output": 0, "cache_creation": 0,
-                           "cache_read": 0, "steps": 0}
+                           "cache_read": 0, "steps": 0,
+                           "meta": bool(o.get("isMeta"))}
                     turns.append(cur)
                     seen.clear()
             elif t == "assistant" and cur is not None:
@@ -197,7 +202,7 @@ def iter_turns(transcript_path):
                     cur["cache_creation"] += u.get("cache_creation_input_tokens", 0)
                     cur["cache_read"] += u.get("cache_read_input_tokens", 0)
                     cur["steps"] += 1
-    return [t for t in turns if t["steps"] > 0]
+    return [t for t in turns if t["steps"] > 0 and not t.get("meta")]
 
 
 def billed_tokens(u):
