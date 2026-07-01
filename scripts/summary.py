@@ -20,13 +20,18 @@ import calibrate  # noqa: E402
 
 
 def find_current_transcript():
-    """The most recently modified transcript = the session running this command.
+    """Resolve the *current* session's transcript.
 
-    Invoking /token-report appends the command turn to the *current* session's
-    transcript, so it is the freshest file on disk. (state.json is shared across
-    sessions and would point at whichever session last *finished* a turn, which
-    is wrong right after switching sessions — so we key on mtime instead.)"""
+    1) CLAUDE_CODE_SESSION_ID → the transcript is named "<session-id>.jsonl", so
+       this is exact and unambiguous even with several sessions open at once.
+    2) Fallback: the most recently modified transcript (the session that just
+       wrote this command). Used only if the env var is unavailable."""
     base = os.path.expanduser(os.path.join("~", ".claude", "projects"))
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if sid:
+        matches = glob.glob(os.path.join(base, "*", sid + ".jsonl"))
+        if matches:
+            return matches[0]
     files = glob.glob(os.path.join(base, "*", "*.jsonl"))
     return max(files, key=os.path.getmtime) if files else None
 
