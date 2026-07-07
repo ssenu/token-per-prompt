@@ -158,11 +158,17 @@ def _static_limit(cfg, static_limits):
     return static_limits.get(cfg.get("plan", "pro"))
 
 
-def calibration_status(cfg, script_dir, static_limits):
+def calibration_status(cfg, script_dir, static_limits, session_id=None):
     """Return (limit, state) where state is one of:
-      "ok"          — calibrated and trusted (samples + sane band met)
-      "calibrating" — auto-calibrate on but not yet trustworthy → show (보정중)
-      "static"      — auto-calibrate off; plain static estimate
+      "static"  — auto-calibrate off; plain static/override anchor.
+      "cold"    — auto-calibrate on, no usable learned value yet → anchor.
+      "learned" — on, a sane learned limit exists but this session hasn't
+                  re-confirmed it against the server yet → show (보정중).
+      "ok"      — on, sane learned limit re-confirmed this session.
+
+    The anchor (_static_limit) is the hardcoded/override plan estimate and is
+    used ONLY for the sane-band gate — never the learned value itself, so a
+    learned limit can never anchor its own plausibility (prevents drift).
     """
     static = _static_limit(cfg, static_limits)
     if not cfg.get("autocalibrate"):
@@ -170,9 +176,14 @@ def calibration_status(cfg, script_dir, static_limits):
     calib = _load(_calib_path(script_dir), {})
     lim = calib.get("limit")
     samples = calib.get("samples", 0)
-    trusted = (lim and lim > 0 and samples >= MIN_SAMPLES and static
-               and SANE_LO * static <= lim <= SANE_HI * static)
-    return (lim, "ok") if trusted else (static, "calibrating")
+    sane = (lim and lim > 0 and static
+            and SANE_LO * static <= lim <= SANE_HI * static)
+    if not sane:
+        return static, "cold"
+    confirmed = (session_id is not None
+                 and calib.get("confirmed_session") == session_id
+                 and samples >= MIN_SAMPLES)
+    return (lim, "ok") if confirmed else (lim, "learned")
 
 
 def effective_limit(cfg, script_dir, static_limits):
