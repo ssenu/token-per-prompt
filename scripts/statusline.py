@@ -80,12 +80,13 @@ def main():
             # of the line vanishing until the turn finishes. The leading
             # indicator replaces the 📊 emoji: 🔄 (climbing) vs ✅ (finalized).
             # calibration_status only READS calib.json here (no API call).
-            limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT)
+            sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+            limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT, sid)
             indicator = turn_indicator(usage, script_dir)
             lines.append(indicator + " "
                          + format_line(usage, cfg, emoji=False, limit=limit,
                                        theme=cfg.get("theme"),
-                                       calibrating=(state == "calibrating")))
+                                       calibrating=(state in ("cold", "learned"))))
         except Exception:
             pass
 

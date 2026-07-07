@@ -298,8 +298,9 @@ def main():
         if cfg.get("autocalibrate"):
             calibrate.update_calibration(script_dir, cfg, billed_tokens(usage),
                                          static_limits=PLAN_5H_LIMIT)
-        limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT)
-        calibrating = state == "calibrating"
+        sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+        limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT, sid)
+        calibrating = state in ("cold", "learned")
     except Exception:
         limit, calibrating = None, False
 

@@ -55,7 +55,8 @@ def main():
         return
 
     cfg = load_config()
-    limit, cal_state = calibrate.calibration_status(cfg, None, PLAN_5H_LIMIT)
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    limit, cal_state = calibrate.calibration_status(cfg, None, PLAN_5H_LIMIT, sid)
     turns = iter_turns(transcript)
     if not turns:
         print("집계할 질문이 없습니다.")
@@ -78,8 +79,8 @@ def main():
     print(f"{'합계':<6}{tot_out:>9,}{tot_cc:>12,}{tot_pct:>8.2f}%   "
           f"({len(turns)}개 질문)")
 
-    src = {"ok": "실측보정", "calibrating": "기본추정(보정중)",
-           "static": "기본추정"}.get(cal_state, "기본추정")
+    src = {"ok": "실측보정", "learned": "이전보정값(재확인중)",
+           "cold": "기본추정(보정중)", "static": "기본추정"}.get(cal_state, "기본추정")
     print(f"\n※ % = (출력+새컨텍스트+입력) ÷ 5시간리밋({int(limit):,}, {src}) · 캐시읽기 제외")
 
 
