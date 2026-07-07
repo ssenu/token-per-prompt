@@ -211,7 +211,7 @@ def billed_tokens(u):
     return u["input"] + u["output"] + u["cache_creation"]
 
 
-def format_line(u, cfg, emoji=True, limit=None, theme=None):
+def format_line(u, cfg, emoji=True, limit=None, theme=None, calibrating=False):
     c = _painter(theme)
     display = cfg.get("display", "basic")
     prefix = "📊 " if emoji else ""
@@ -232,7 +232,9 @@ def format_line(u, cfg, emoji=True, limit=None, theme=None):
         limit = PLAN_5H_LIMIT.get(cfg.get("plan", "pro"))
     if limit:
         pct = billed_tokens(u) / limit * 100
-        return base + " " + c("dim", "|") + " " + c("pct", f"5시간 리밋의 약 {pct:.2f}%")
+        tail = f"5시간 리밋의 약 {pct:.2f}%"
+        pct_str = c("pct", tail) + (" " + c("muted", "(보정중)") if calibrating else "")
+        return base + " " + c("dim", "|") + " " + pct_str
     return base
 
 
@@ -287,17 +289,21 @@ def main():
     except Exception:
         pass
 
-    # Auto-calibrate the 5-hour limit from real server utilization (cached).
+    # Auto-calibrate the 5-hour limit from real server utilization (cached),
+    # then resolve (limit, state) — state drives the "(보정중)" marker.
     limit = None
-    if cfg.get("autocalibrate"):
-        try:
-            import calibrate
-            calibrate.update_calibration(script_dir, cfg, billed_tokens(usage))
-            limit = calibrate.effective_limit(cfg, script_dir, PLAN_5H_LIMIT)
-        except Exception:
-            limit = None
+    calibrating = False
+    try:
+        import calibrate
+        if cfg.get("autocalibrate"):
+            calibrate.update_calibration(script_dir, cfg, billed_tokens(usage),
+                                         static_limits=PLAN_5H_LIMIT)
+        limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT)
+        calibrating = state == "calibrating"
+    except Exception:
+        limit, calibrating = None, False
 
-    line = format_line(usage, cfg, emoji=False, limit=limit)
+    line = format_line(usage, cfg, emoji=False, limit=limit, calibrating=calibrating)
     print(json.dumps({"systemMessage": line}, ensure_ascii=False))
     sys.exit(0)
 

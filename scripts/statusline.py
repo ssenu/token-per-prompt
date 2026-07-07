@@ -79,12 +79,13 @@ def main():
             # resets to 0 and then climbs as the answer's steps land, instead
             # of the line vanishing until the turn finishes. The leading
             # indicator replaces the 📊 emoji: 🔄 (climbing) vs ✅ (finalized).
-            # effective_limit only READS calib.json here (no API call).
-            limit = calibrate.effective_limit(cfg, script_dir, PLAN_5H_LIMIT)
+            # calibration_status only READS calib.json here (no API call).
+            limit, state = calibrate.calibration_status(cfg, script_dir, PLAN_5H_LIMIT)
             indicator = turn_indicator(usage, script_dir)
             lines.append(indicator + " "
                          + format_line(usage, cfg, emoji=False, limit=limit,
-                                       theme=cfg.get("theme")))
+                                       theme=cfg.get("theme"),
+                                       calibrating=(state == "calibrating")))
         except Exception:
             pass
 

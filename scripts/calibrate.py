@@ -46,11 +46,23 @@ def _load(path, default):
 
 
 def _save(path, data):
+    # Atomic write (temp + replace) so a concurrent reader / another session
+    # never sees a half-written file. Reduces corruption when multiple sessions'
+    # Stop hooks touch the shared calib.json at once.
     try:
-        with open(path, "w", encoding="utf-8") as fh:
+        tmp = path + f".{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False)
+        os.replace(tmp, path)
     except Exception:
         pass
+
+
+# A calibrated limit is only trusted within this band of the plan's static
+# default. Outside it (e.g. multi-session race undercounting cum_tokens →
+# absurdly small limit → one prompt showing 90%) we reject it as noise.
+SANE_LO, SANE_HI = 0.25, 4.0
+MIN_SAMPLES = 2
 
 
 def get_utilization(script_dir, ttl=300):
@@ -88,10 +100,13 @@ def get_utilization(script_dir, ttl=300):
         return (cache.get("util"), cache.get("reset")) if cache else (None, None)
 
 
-def update_calibration(script_dir, cfg, turn_billed, ttl=300):
+def update_calibration(script_dir, cfg, turn_billed, static_limits=None, ttl=300):
     """Accumulate this turn's tokens and refine the limit when utilization moved.
 
     Runs from the Stop hook (once per turn). Cheap: the server read is TTL-cached.
+    A derived limit outside the sane band (see SANE_LO/HI) is rejected without
+    advancing the baseline, so the span keeps growing and can self-correct — this
+    stops multi-session token undercounting from producing a bogus tiny limit.
     """
     calib = _load(_calib_path(script_dir), {})
     util, reset = get_utilization(script_dir, ttl=ttl)
@@ -108,6 +123,7 @@ def update_calibration(script_dir, cfg, turn_billed, ttl=300):
         calib["cum_tokens"] = 0
         calib["baseline_util"] = util
         calib["baseline_tokens"] = 0
+        calib["samples"] = 0
 
     calib["cum_tokens"] = calib.get("cum_tokens", 0) + turn_billed
 
@@ -115,21 +131,38 @@ def update_calibration(script_dir, cfg, turn_billed, ttl=300):
     dt = calib["cum_tokens"] - calib.get("baseline_tokens", 0)  # tokens in span
     if du >= 1 and dt > 0:
         new_limit = dt / (du / 100.0)
-        old = calib.get("limit")
-        # Exponential smoothing so a single noisy span can't swing it wildly.
-        calib["limit"] = new_limit if not old else 0.6 * old + 0.4 * new_limit
-        calib["samples"] = calib.get("samples", 0) + 1
-        calib["baseline_util"] = util
-        calib["baseline_tokens"] = calib["cum_tokens"]
+        static = (static_limits or {}).get(cfg.get("plan", "pro"))
+        plausible = not static or (SANE_LO * static <= new_limit <= SANE_HI * static)
+        if plausible:
+            old = calib.get("limit")
+            # Exponential smoothing so a single noisy span can't swing it wildly.
+            calib["limit"] = new_limit if not old else 0.6 * old + 0.4 * new_limit
+            calib["samples"] = calib.get("samples", 0) + 1
+            calib["baseline_util"] = util
+            calib["baseline_tokens"] = calib["cum_tokens"]
+        # else: implausible (likely concurrent-session undercount) → keep the
+        # span open (don't advance baseline) so more tokens can correct it.
 
     _save(_calib_path(script_dir), calib)
 
 
+def calibration_status(cfg, script_dir, static_limits):
+    """Return (limit, state) where state is one of:
+      "ok"          — calibrated and trusted (samples + sane band met)
+      "calibrating" — auto-calibrate on but not yet trustworthy → show (보정중)
+      "static"      — auto-calibrate off; plain static estimate
+    """
+    static = static_limits.get(cfg.get("plan", "pro"))
+    if not cfg.get("autocalibrate"):
+        return static, "static"
+    calib = _load(_calib_path(script_dir), {})
+    lim = calib.get("limit")
+    samples = calib.get("samples", 0)
+    trusted = (lim and lim > 0 and samples >= MIN_SAMPLES and static
+               and SANE_LO * static <= lim <= SANE_HI * static)
+    return (lim, "ok") if trusted else (static, "calibrating")
+
+
 def effective_limit(cfg, script_dir, static_limits):
-    """Calibrated limit if auto-calibration is on and has a value, else static."""
-    if cfg.get("autocalibrate"):
-        calib = _load(_calib_path(script_dir), {})
-        lim = calib.get("limit")
-        if lim and lim > 0:
-            return lim
-    return static_limits.get(cfg.get("plan", "pro"))
+    """Back-compat: just the limit from calibration_status."""
+    return calibration_status(cfg, script_dir, static_limits)[0]

@@ -55,7 +55,7 @@ def main():
         return
 
     cfg = load_config()
-    limit = calibrate.effective_limit(cfg, None, PLAN_5H_LIMIT)
+    limit, cal_state = calibrate.calibration_status(cfg, None, PLAN_5H_LIMIT)
     turns = iter_turns(transcript)
     if not turns:
         print("집계할 질문이 없습니다.")
@@ -78,9 +78,8 @@ def main():
     print(f"{'합계':<6}{tot_out:>9,}{tot_cc:>12,}{tot_pct:>8.2f}%   "
           f"({len(turns)}개 질문)")
 
-    calibrated = bool(cfg.get("autocalibrate")
-                      and calibrate._load(calibrate._calib_path(), {}).get("limit"))
-    src = "실측보정" if calibrated else "기본추정"
+    src = {"ok": "실측보정", "calibrating": "기본추정(보정중)",
+           "static": "기본추정"}.get(cal_state, "기본추정")
     print(f"\n※ % = (출력+새컨텍스트+입력) ÷ 5시간리밋({int(limit):,}, {src}) · 캐시읽기 제외")
 
 
