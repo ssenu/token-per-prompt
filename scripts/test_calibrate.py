@@ -70,5 +70,47 @@ class CalibrationStatusTest(unittest.TestCase):
         self.assertEqual(limit, 900_000)
 
 
+class UpdateCalibrationTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._orig_dir = calibrate.DATA_DIR
+        calibrate.DATA_DIR = self.tmp
+        self._orig_util = calibrate.get_utilization
+        os.environ["CLAUDE_CODE_SESSION_ID"] = "sess-xyz"
+
+    def tearDown(self):
+        calibrate.DATA_DIR = self._orig_dir
+        calibrate.get_utilization = self._orig_util
+        os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
+
+    def _calib(self):
+        with open(os.path.join(self.tmp, "calib.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_advancing_sample_records_session(self):
+        cfg = {"plan": "pro", "autocalibrate": True}
+        # First call establishes the window baseline at util=0.
+        calibrate.get_utilization = lambda script_dir, ttl=300: (0.0, "reset-A")
+        calibrate.update_calibration(None, cfg, 300_000, static_limits=STATIC)
+        # Second call: util rose to 52 (+52%), tokens accumulated → a sample lands.
+        # new_limit = 312_000 / 0.52 ≈ 600_000 which is within the pro sane band.
+        calibrate.get_utilization = lambda script_dir, ttl=300: (52.0, "reset-A")
+        calibrate.update_calibration(None, cfg, 12_000, static_limits=STATIC)
+        c = self._calib()
+        self.assertGreaterEqual(c.get("samples", 0), 1)
+        self.assertEqual(c.get("confirmed_session"), "sess-xyz")
+
+    def test_window_reset_clears_confirmed_session(self):
+        cfg = {"plan": "pro", "autocalibrate": True}
+        calibrate.get_utilization = lambda script_dir, ttl=300: (0.0, "reset-A")
+        calibrate.update_calibration(None, cfg, 300_000, static_limits=STATIC)
+        calibrate.get_utilization = lambda script_dir, ttl=300: (52.0, "reset-A")
+        calibrate.update_calibration(None, cfg, 12_000, static_limits=STATIC)
+        # New window (different reset) → confirmed_session cleared.
+        calibrate.get_utilization = lambda script_dir, ttl=300: (3.0, "reset-B")
+        calibrate.update_calibration(None, cfg, 1_000, static_limits=STATIC)
+        self.assertIsNone(self._calib().get("confirmed_session"))
+
+
 if __name__ == "__main__":
     unittest.main()

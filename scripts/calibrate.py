@@ -127,6 +127,7 @@ def update_calibration(script_dir, cfg, turn_billed, static_limits=None, ttl=300
         calib["cum_tokens"] = 0
         calib["baseline_util"] = util
         calib["baseline_tokens"] = 0
+        calib["confirmed_session"] = None
 
     calib["cum_tokens"] = calib.get("cum_tokens", 0) + turn_billed
 
@@ -141,6 +142,7 @@ def update_calibration(script_dir, cfg, turn_billed, static_limits=None, ttl=300
             # Exponential smoothing so a single noisy span can't swing it wildly.
             calib["limit"] = new_limit if not old else 0.6 * old + 0.4 * new_limit
             calib["samples"] = calib.get("samples", 0) + 1
+            calib["confirmed_session"] = os.environ.get("CLAUDE_CODE_SESSION_ID")
             calib["baseline_util"] = util
             calib["baseline_tokens"] = calib["cum_tokens"]
         # else: implausible (likely concurrent-session undercount) → keep the
